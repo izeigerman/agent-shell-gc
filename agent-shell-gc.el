@@ -180,7 +180,10 @@ Entry keys: `:first-seen', `:last-activity', `:repo', `:branch',
 `:origin' and `:warned'.")
 
 (defvar agent-shell-gc--worktree-cache (make-hash-table :test 'equal)
-  "Hash of directory to its resolved worktree plist, or `none'.")
+  "Hash of a worktree root to its resolved plist.
+Holds only directories that resolved to themselves: one that is not a
+worktree root today can become one later, so remembering that would
+blacklist it for the rest of the session.")
 
 (defvar agent-shell-gc--timer nil
   "The sweeper timer.")
@@ -489,15 +492,23 @@ directory, a linked one a `.git' file naming its real gitdir, whose
                   :branch (agent-shell-gc--head-branch gitdir))))))))
 
 (defun agent-shell-gc--worktree-info (dir)
-  "Return the worktree plist for DIR, or nil.  Cached per directory."
+  "Return the worktree plist for DIR, or nil.
+
+Only a resolution naming DIR itself is cached, since the identity of a
+worktree does not change while it exists.  Anything else is recomputed
+every time, because it is a claim about what DIR is *not* yet, and a
+shell routinely reaches a directory before `git worktree add' has
+populated it.  Remembering such a claim would hide the worktree for the
+rest of the session: nil when DIR was outside a repository, or the
+enclosing main worktree when DIR was a path inside one, which is where
+`agent-shell' puts its worktrees by default."
   (when dir
-    (let ((cached (gethash dir agent-shell-gc--worktree-cache 'missing)))
-      (cond ((eq cached 'missing)
-             (let ((info (agent-shell-gc--resolve-worktree dir)))
-               (puthash dir (or info 'none) agent-shell-gc--worktree-cache)
-               info))
-            ((eq cached 'none) nil)
-            (t cached)))))
+    (let ((key (agent-shell-gc--normalize-dir dir)))
+      (or (gethash key agent-shell-gc--worktree-cache)
+          (when-let* ((info (agent-shell-gc--resolve-worktree dir)))
+            (when (equal (plist-get info :worktree) key)
+              (puthash key info agent-shell-gc--worktree-cache))
+            info)))))
 
 (defun agent-shell-gc--register-worktree (dir origin)
   "Register the linked worktree containing DIR with ORIGIN.  Return its key.
