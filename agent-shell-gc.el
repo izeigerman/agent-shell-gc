@@ -819,14 +819,58 @@ below the session TTL cannot collect one before its sessions are gone."
         ((>= idle ttl) "due")
         (t (agent-shell-gc--format-duration (- ttl idle)))))
 
+(defconst agent-shell-gc--list-name-width 40
+  "Minimum width of the name column in `agent-shell-gc-list'.")
+
+(defun agent-shell-gc--session-rows ()
+  "Return a row of name, idle time and status for each tracked session."
+  (mapcar (lambda (shell)
+            (let ((idle (agent-shell-gc--idle shell))
+                  (protected (agent-shell-gc--protected-by shell)))
+              (list (buffer-name shell)
+                    (agent-shell-gc--format-duration idle)
+                    (if protected
+                        (format "kept: %s" protected)
+                      (agent-shell-gc--countdown
+                       idle agent-shell-gc-idle-session-ttl)))))
+          (agent-shell-buffers)))
+
+(defun agent-shell-gc--worktree-rows (now)
+  "Return a row of name, idle time and status for each worktree, as of NOW."
+  (let ((rows nil))
+    (maphash
+     (lambda (dir entry)
+       (let ((idle (- now (or (map-elt entry :last-activity) now)))
+             (sessions (length (agent-shell-gc--buffers-under dir))))
+         (push (list (abbreviate-file-name dir)
+                     (agent-shell-gc--format-duration idle)
+                     (cond ((not (agent-shell-gc--in-scope-p dir entry))
+                            "out of scope")
+                           ((> sessions 0)
+                            (format "%d live session(s)" sessions))
+                           (t (agent-shell-gc--countdown
+                               idle agent-shell-gc-idle-worktree-ttl))))
+               rows)))
+     agent-shell-gc--worktrees)
+    (nreverse rows)))
+
+(defun agent-shell-gc--row-format (rows)
+  "Return a format string aligning the name column across all of ROWS."
+  (format "  %%-%ds idle %%-8s %%s\n"
+          (apply #'max agent-shell-gc--list-name-width
+                 (mapcar (lambda (row) (length (car row))) rows))))
+
 ;;;###autoload
 (defun agent-shell-gc-list ()
   "Show tracked sessions and worktrees with their idle times."
   (interactive)
   (unless agent-shell-gc--store-loaded
     (agent-shell-gc--load-store))
-  (let ((buffer (get-buffer-create "*agent-shell-gc-list*"))
-        (now (float-time)))
+  (let* ((buffer (get-buffer-create "*agent-shell-gc-list*"))
+         (now (float-time))
+         (sessions (agent-shell-gc--session-rows))
+         (worktrees (agent-shell-gc--worktree-rows now))
+         (row-format (agent-shell-gc--row-format (append sessions worktrees))))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
@@ -835,35 +879,15 @@ below the session TTL cannot collect one before its sessions are gone."
                             (agent-shell-gc--format-duration
                              agent-shell-gc-idle-session-ttl)
                           "disabled")))
-        (dolist (shell (agent-shell-buffers))
-          (let* ((idle (agent-shell-gc--idle shell))
-                 (protected (agent-shell-gc--protected-by shell)))
-            (insert (format "  %-40s idle %-8s %s\n"
-                            (buffer-name shell)
-                            (agent-shell-gc--format-duration idle)
-                            (if protected
-                                (format "kept: %s" protected)
-                              (agent-shell-gc--countdown
-                               idle agent-shell-gc-idle-session-ttl))))))
+        (dolist (row sessions)
+          (insert (apply #'format row-format row)))
         (insert (format "\nWorktrees (ttl %s)\n"
                         (if agent-shell-gc-idle-worktree-ttl
                             (agent-shell-gc--format-duration
                              agent-shell-gc-idle-worktree-ttl)
                           "disabled")))
-        (maphash
-         (lambda (dir entry)
-           (let ((idle (- now (or (map-elt entry :last-activity) now)))
-                 (sessions (length (agent-shell-gc--buffers-under dir))))
-             (insert (format "  %-40s idle %-8s %s\n"
-                             (abbreviate-file-name dir)
-                             (agent-shell-gc--format-duration idle)
-                             (cond ((not (agent-shell-gc--in-scope-p dir entry))
-                                    "out of scope")
-                                   ((> sessions 0)
-                                    (format "%d live session(s)" sessions))
-                                   (t (agent-shell-gc--countdown
-                                       idle agent-shell-gc-idle-worktree-ttl)))))))
-         agent-shell-gc--worktrees)
+        (dolist (row worktrees)
+          (insert (apply #'format row-format row)))
         (when (agent-shell-gc--in-grace-p)
           (insert (format "\nCollection held for %s\n"
                           (agent-shell-gc--format-duration
