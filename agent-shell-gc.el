@@ -180,7 +180,10 @@ Entry keys: `:first-seen', `:last-activity', `:repo', `:branch',
 `:origin' and `:warned'.")
 
 (defvar agent-shell-gc--worktree-cache (make-hash-table :test 'equal)
-  "Hash of directory to its resolved worktree plist, or `none'.")
+  "Hash of directory to its resolved worktree plist.
+Only successful resolutions are cached: a directory that is not a
+worktree today can become one later, so remembering the failure would
+blacklist it for the rest of the session.")
 
 (defvar agent-shell-gc--timer nil
   "The sweeper timer.")
@@ -489,15 +492,18 @@ directory, a linked one a `.git' file naming its real gitdir, whose
                   :branch (agent-shell-gc--head-branch gitdir))))))))
 
 (defun agent-shell-gc--worktree-info (dir)
-  "Return the worktree plist for DIR, or nil.  Cached per directory."
+  "Return the worktree plist for DIR, or nil.
+
+Successful resolutions are cached, since the identity of a worktree does
+not change while it exists.  Failures are not: a shell often reaches a
+directory before `git worktree add' has populated it, and caching that
+would leave the worktree unregistered for good."
   (when dir
-    (let ((cached (gethash dir agent-shell-gc--worktree-cache 'missing)))
-      (cond ((eq cached 'missing)
-             (let ((info (agent-shell-gc--resolve-worktree dir)))
-               (puthash dir (or info 'none) agent-shell-gc--worktree-cache)
-               info))
-            ((eq cached 'none) nil)
-            (t cached)))))
+    (let ((key (agent-shell-gc--normalize-dir dir)))
+      (or (gethash key agent-shell-gc--worktree-cache)
+          (when-let* ((info (agent-shell-gc--resolve-worktree dir)))
+            (puthash key info agent-shell-gc--worktree-cache)
+            info)))))
 
 (defun agent-shell-gc--register-worktree (dir origin)
   "Register the linked worktree containing DIR with ORIGIN.  Return its key.

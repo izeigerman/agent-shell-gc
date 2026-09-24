@@ -102,6 +102,19 @@ The store, registry and caches are isolated per test."
   (agent-shell-gc-tests--with-repo
     (should-not (agent-shell-gc--worktree-info temporary-file-directory))))
 
+(ert-deftest agent-shell-gc-resolve-retries-after-worktree-appears-test ()
+  "A directory probed before it is a worktree resolves once it becomes one.
+An agent shell regularly reaches its directory before `git worktree add'
+has populated it, so a failed resolution must not be remembered."
+  (agent-shell-gc-tests--with-repo
+    (let ((dir (expand-file-name "../late-noether" agent-shell-gc-tests--repo)))
+      (should-not (agent-shell-gc--worktree-info dir))
+      (agent-shell-gc-tests--git agent-shell-gc-tests--repo
+                                 "worktree" "add" "-q" dir "-b" "late-noether")
+      (should (plist-get (agent-shell-gc--worktree-info dir) :linked))
+      (should (equal (agent-shell-gc--register-worktree dir 'session)
+                     (agent-shell-gc--normalize-dir dir))))))
+
 (ert-deftest agent-shell-gc-resolve-normalizes-symlinked-paths-test ()
   "Two spellings of one worktree resolve to the same key.
 Without this, a \"/tmp\" and a \"/private/tmp\" spelling on macOS become
