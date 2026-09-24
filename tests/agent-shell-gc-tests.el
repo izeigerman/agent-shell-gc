@@ -103,7 +103,7 @@ The store, registry and caches are isolated per test."
     (should-not (agent-shell-gc--worktree-info temporary-file-directory))))
 
 (ert-deftest agent-shell-gc-resolve-retries-after-worktree-appears-test ()
-  "A directory probed before it is a worktree resolves once it becomes one.
+  "A directory outside any repository resolves once it becomes a worktree.
 An agent shell regularly reaches its directory before `git worktree add'
 has populated it, so a failed resolution must not be remembered."
   (agent-shell-gc-tests--with-repo
@@ -115,15 +115,31 @@ has populated it, so a failed resolution must not be remembered."
       (should (equal (agent-shell-gc--register-worktree dir 'session)
                      (agent-shell-gc--normalize-dir dir))))))
 
+(ert-deftest agent-shell-gc-resolve-retries-inside-repository-test ()
+  "A path inside the main checkout resolves once it becomes a worktree.
+Probed early it resolves to the enclosing main worktree, which must not
+be remembered as DIR's own answer: this is where `agent-shell' puts its
+worktrees, so caching it would hide every one of them."
+  (agent-shell-gc-tests--with-repo
+    (let ((dir (expand-file-name ".agent-shell/worktrees/late-noether"
+                                 agent-shell-gc-tests--repo)))
+      (should-not (plist-get (agent-shell-gc--worktree-info dir) :linked))
+      (agent-shell-gc-tests--git agent-shell-gc-tests--repo
+                                 "worktree" "add" "-q" dir "-b" "late-noether")
+      (should (plist-get (agent-shell-gc--worktree-info dir) :linked))
+      (should (equal (agent-shell-gc--register-worktree dir 'session)
+                     (agent-shell-gc--normalize-dir dir))))))
+
 (ert-deftest agent-shell-gc-resolve-normalizes-symlinked-paths-test ()
-  "Two spellings of one worktree resolve to the same key.
+  "Two spellings of one worktree share a single cache entry.
 Without this, a \"/tmp\" and a \"/private/tmp\" spelling on macOS become
 two entries that each look idle."
   (agent-shell-gc-tests--with-repo
     (let* ((dir (expand-file-name "../outside-lovelace" agent-shell-gc-tests--repo))
            (resolved (expand-file-name (file-truename dir))))
       (should (equal (plist-get (agent-shell-gc--worktree-info dir) :worktree)
-                     (plist-get (agent-shell-gc--worktree-info resolved) :worktree))))))
+                     (plist-get (agent-shell-gc--worktree-info resolved) :worktree)))
+      (should (equal (hash-table-count agent-shell-gc--worktree-cache) 1)))))
 
 ;;; Safety
 
