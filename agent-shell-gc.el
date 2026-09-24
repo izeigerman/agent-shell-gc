@@ -42,9 +42,7 @@
 ;; so worktree defaults are conservative: only linked worktrees, only ones we
 ;; have seen a session running in, never one with uncommitted or unmerged work.
 ;;
-;; See DESIGN.md for the full rationale.
-;;
-;;   (agent-shell-gc-mode 1)
+;;   (agent-shell-gc-mode)
 ;;   (setq agent-shell-gc-idle-session-ttl (* 4 60 60))
 ;;   (setq agent-shell-gc-idle-worktree-ttl (* 7 24 60 60))
 

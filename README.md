@@ -25,7 +25,7 @@ activity; nothing is collected until you set a TTL.
   :config
   (setq agent-shell-gc-idle-session-ttl (* 4 60 60))    ; 4 hours
   (setq agent-shell-gc-idle-worktree-ttl (* 7 24 60 60)) ; 7 days
-  (agent-shell-gc-mode 1))
+  (agent-shell-gc-mode))
 ```
 
 ### straight.el
@@ -35,7 +35,7 @@ activity; nothing is collected until you set a TTL.
   :straight (:host github :repo "izeigerman/agent-shell-gc")
   :after agent-shell
   :config
-  (agent-shell-gc-mode 1))
+  (agent-shell-gc-mode))
 ```
 
 ### Manual
@@ -47,7 +47,7 @@ git clone https://github.com/izeigerman/agent-shell-gc ~/.emacs.d/site-lisp/agen
 ```elisp
 (add-to-list 'load-path "~/.emacs.d/site-lisp/agent-shell-gc")
 (require 'agent-shell-gc)
-(agent-shell-gc-mode 1)
+(agent-shell-gc-mode)
 ```
 
 ## Configuration
