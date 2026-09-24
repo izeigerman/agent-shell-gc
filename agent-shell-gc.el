@@ -859,7 +859,10 @@ below the session TTL cannot collect one before its sessions are gone."
                            (- agent-shell-gc--grace-until now)))))
         (goto-char (point-min)))
       (special-mode))
-    (display-buffer buffer)))
+    (display-buffer buffer
+                    `((display-buffer-reuse-window
+                       display-buffer-pop-up-window)
+                      (inhibit-same-window . ,(not (eq (window-buffer) buffer)))))))
 
 ;;;; Mode
 
