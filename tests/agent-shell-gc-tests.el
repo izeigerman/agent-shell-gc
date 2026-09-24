@@ -465,6 +465,19 @@ This is what lets a Desktop-restored buffer be collected at all."
   (should (equal (agent-shell-gc--countdown 100 50) "due"))
   (should (equal (agent-shell-gc--countdown 40 100) "1m")))
 
+(ert-deftest agent-shell-gc-row-format-test ()
+  "Every row shares a name column wide enough for the longest name."
+  (let* ((short '(("shell" "1m" "6h")))
+         (long (cons (list (make-string 60 ?x) "1m" "due") short))
+         (rows (mapcar (lambda (row)
+                         (apply #'format (agent-shell-gc--row-format long) row))
+                       long)))
+    (should (equal (agent-shell-gc--row-format short)
+                   (format "  %%-%ds idle %%-8s %%s\n"
+                           agent-shell-gc--list-name-width)))
+    (should (apply #'= (mapcar (lambda (row) (string-match-p "idle " row))
+                               rows)))))
+
 (provide 'agent-shell-gc-tests)
 
 ;;; agent-shell-gc-tests.el ends here
