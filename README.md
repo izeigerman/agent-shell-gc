@@ -2,7 +2,7 @@
 
 Garbage collection for [`agent-shell`](https://github.com/xenodium/agent-shell).
 
-Kills agent sessions that have gone idle, and removes the git worktrees they
+Kills stale `agent-shell` session buffers, and removes the git worktrees they
 leave behind. Both are off by default. Enabling the mode only starts recording
 activity; nothing is collected until you set a TTL.
 
