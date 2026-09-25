@@ -217,6 +217,16 @@ Events emitted during a `session/load' replay describe old activity, not
 new, so stamping them would give every Desktop-restored session a fresh
 clock and stop worktrees from ever being collected.")
 
+(defconst agent-shell-gc--settling-events
+  '(init-finished prompt-ready session-restored)
+  "Events marking the end of a session's initialization or replay.
+They report that the session has settled rather than that anything
+happened in it, so each ends the replay window without counting as
+activity.  A Desktop restore emits all three for every session it brings
+back, in no order this package should depend on, so an event that both
+ends the window and stamps would hand every restored session a fresh
+idle clock on every Emacs restart.")
+
 ;;;; Logging
 
 (defun agent-shell-gc-log (format-string &rest args)
@@ -359,16 +369,22 @@ the clock it had before the restart."
 
 ;;;; Activity tracking
 
-(defun agent-shell-gc--stamp (&optional buffer)
-  "Record now as the last activity of BUFFER's shell."
-  (when-let* ((shell (agent-shell-gc--shell-buffer (or buffer (current-buffer)))))
-    (with-current-buffer shell
-      (setq agent-shell-gc--activity (float-time)))))
+(defun agent-shell-gc--stamp (shell)
+  "Record now as SHELL's last activity.
+SHELL is the agent shell itself, so callers holding some other buffer
+resolve it with `agent-shell-gc--shell-buffer' first."
+  (with-current-buffer shell
+    (setq agent-shell-gc--activity (float-time))))
 
 (defun agent-shell-gc--stamp-typing ()
-  "Record typing in the current buffer, unless it is still replaying."
-  (unless (buffer-local-value 'agent-shell-gc--replaying (current-buffer))
-    (agent-shell-gc--stamp)))
+  "Record typing in the current buffer, unless its shell is still replaying.
+The replay flag lives on the shell, so a viewport buffer is resolved to
+it before reading: a viewport receives no events, so its own binding is
+the global default and stays non-nil, which would make composing in one
+count for nothing."
+  (when-let* ((shell (agent-shell-gc--shell-buffer (current-buffer)))
+              ((not (buffer-local-value 'agent-shell-gc--replaying shell))))
+    (agent-shell-gc--stamp shell)))
 
 (defun agent-shell-gc--on-event (event)
   "Record EVENT as activity on the current shell.
@@ -376,16 +392,21 @@ the clock it had before the restart."
 Events are ignored while the session is initializing or replaying
 history, since a `session/load' replay re-emits old output and would
 otherwise make every restored session look freshly active.
-`input-submitted' is always honoured, since it can only come from the user."
+`agent-shell-gc--settling-events' end that window without counting as
+activity themselves.  `input-submitted' is always honoured, since it can
+only come from the user.
+
+Events arrive with their shell buffer current, so it is the one stamped."
   (let ((name (map-elt event :event)))
-    (pcase name
-      ((or 'prompt-ready 'session-restored 'init-finished 'input-submitted)
-       (setq agent-shell-gc--replaying nil))
-      (_ nil))
     (cond ((eq name 'clean-up)
            (agent-shell-gc--flush-buffer))
-          ((or (eq name 'input-submitted) (not agent-shell-gc--replaying))
-           (agent-shell-gc--stamp)))))
+          ((eq name 'input-submitted)
+           (setq agent-shell-gc--replaying nil)
+           (agent-shell-gc--stamp (current-buffer)))
+          ((memq name agent-shell-gc--settling-events)
+           (setq agent-shell-gc--replaying nil))
+          ((not agent-shell-gc--replaying)
+           (agent-shell-gc--stamp (current-buffer))))))
 
 (defun agent-shell-gc--flush-buffer ()
   "Write the current shell's activity to the store before it goes away."
@@ -415,8 +436,8 @@ available."
 (defun agent-shell-gc--on-window-selection (&rest _)
   "Record the selected buffer as activity on its shell or worktree."
   (when agent-shell-gc-mode
-    (if (agent-shell-gc--shell-buffer (current-buffer))
-        (agent-shell-gc--stamp)
+    (if-let* ((shell (agent-shell-gc--shell-buffer (current-buffer))))
+        (agent-shell-gc--stamp shell)
       (agent-shell-gc--touch-worktree-at default-directory))))
 
 (defun agent-shell-gc--on-save ()
