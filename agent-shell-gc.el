@@ -223,9 +223,20 @@ clock and stop worktrees from ever being collected.")
 They report that the session has settled rather than that anything
 happened in it, so each ends the replay window without counting as
 activity.  A Desktop restore emits all three for every session it brings
-back, in no order this package should depend on, so an event that both
-ends the window and stamps would hand every restored session a fresh
-idle clock on every Emacs restart.")
+back, in no order this package should depend on.")
+
+(defconst agent-shell-gc--activity-events
+  '(input-submitted permission-response agent-message-chunk tool-call-update
+                    turn-complete permission-request file-write)
+  "Events reporting that the user or the agent did something.
+Nothing else `agent-shell' emits counts as activity.  Most of its event
+stream describes a session's own machinery rather than work done in it:
+the whole `init-*' pipeline, session selection, title and config option
+updates, and `idle', which reports the very opposite.  Those keep
+arriving once a restored session has settled, since `session-restored'
+is emitted when the replay is laid down and the rest of initialization
+runs after it, so anything not named here would hand every restored
+session a fresh idle clock on every Emacs restart.")
 
 ;;;; Logging
 
@@ -389,9 +400,10 @@ count for nothing."
 (defun agent-shell-gc--on-event (event)
   "Record EVENT as activity on the current shell.
 
-Events are ignored while the session is initializing or replaying
-history, since a `session/load' replay re-emits old output and would
-otherwise make every restored session look freshly active.
+Only `agent-shell-gc--activity-events' count, and only outside the
+window in which a session is initializing or replaying history, since a
+`session/load' replay re-emits old output and would otherwise make every
+restored session look freshly active.
 `agent-shell-gc--settling-events' end that window without counting as
 activity themselves.  `input-submitted' is always honoured, since it can
 only come from the user.
@@ -405,7 +417,8 @@ Events arrive with their shell buffer current, so it is the one stamped."
            (agent-shell-gc--stamp (current-buffer)))
           ((memq name agent-shell-gc--settling-events)
            (setq agent-shell-gc--replaying nil))
-          ((not agent-shell-gc--replaying)
+          ((and (memq name agent-shell-gc--activity-events)
+                (not agent-shell-gc--replaying))
            (agent-shell-gc--stamp (current-buffer))))))
 
 (defun agent-shell-gc--flush-buffer ()

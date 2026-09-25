@@ -425,6 +425,33 @@ the next one looking like activity on a settled session."
     (agent-shell-gc--on-event '((:event . agent-message-chunk)))
     (should agent-shell-gc--activity)))
 
+(ert-deftest agent-shell-gc-machinery-events-are-not-activity-test ()
+  "Events describing a session's own machinery never count as activity.
+They arrive on a settled session, so counting them would keep a shell
+alive on nothing but its own bookkeeping."
+  (dolist (name '(init-started init-client init-subscriptions init-handshake
+                               init-session init-model init-session-mode
+                               session-list session-selected session-prompt
+                               config-option-update session-title-changed
+                               idle error))
+    (with-temp-buffer
+      (setq agent-shell-gc--replaying nil)
+      (agent-shell-gc--on-event (list (cons :event name)))
+      (should-not agent-shell-gc--activity))))
+
+(ert-deftest agent-shell-gc-restore-sequence-is-not-activity-test ()
+  "A whole Desktop restore leaves the session's idle clock alone.
+`session-restored' is emitted as soon as the replay is laid down, and the
+rest of initialization follows it: `agent-shell' sets the default session
+mode and the agent reports the change back.  None of that is activity."
+  (with-temp-buffer
+    (setq agent-shell-gc--replaying t)
+    (dolist (name '(agent-message-chunk tool-call-update session-restored
+                                        prompt-ready init-session-mode
+                                        config-option-update init-finished))
+      (agent-shell-gc--on-event (list (cons :event name))))
+    (should-not agent-shell-gc--activity)))
+
 (ert-deftest agent-shell-gc-input-submitted-is-always-activity-test ()
   "A submitted prompt counts even while the session looks like it is replaying."
   (with-temp-buffer

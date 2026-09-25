@@ -102,14 +102,18 @@ immediately on the first sweep instead.
 
 ## How it works
 
-Activity comes from `agent-shell`'s event stream, from typing in a shell or its
-viewport, and, for worktrees, from saving a file or selecting a buffer inside
-one. Edits made entirely outside Emacs are not observed, so set the worktree TTL
-generously. Tracked activity is stored on disk, so it survives both Emacs
-restarts and [`agent-shell-desktop`](https://github.com/timfel/agent-shell-desktop.el)
-session restores. Starting up and replaying a restored conversation is not
-activity, so a session brought back by a restore keeps the idle clock it had
-before, rather than the time of the restart.
+Activity comes from the events in `agent-shell`'s stream that report the user or
+the agent doing something (a submitted prompt, streamed output, tool calls,
+permission prompts, file writes), from typing in a shell or its viewport, and,
+for worktrees, from saving a file or selecting a buffer inside one. Events about
+a session's own machinery, such as starting up, replaying a restored
+conversation, setting the default model or mode, or going idle, are not
+activity. Edits made entirely outside Emacs are not observed, so set the
+worktree TTL generously. Tracked activity is stored on disk, so it survives both
+Emacs restarts and
+[`agent-shell-desktop`](https://github.com/timfel/agent-shell-desktop.el)
+session restores: a session brought back by a restore keeps the idle clock it
+had before, rather than the time of the restart.
 
 Start with `agent-shell-gc-dry-run` set and watch `agent-shell-gc-list` for a
 day or so before trusting a TTL.
