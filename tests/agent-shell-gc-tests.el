@@ -374,6 +374,52 @@ Otherwise installing this package hands every stale worktree a fresh TTL."
     (agent-shell-gc--load-store)
     (should (= (hash-table-count agent-shell-gc--sessions) 0))))
 
+;;; Events
+
+(ert-deftest agent-shell-gc-settling-events-are-not-activity-test ()
+  "The events a session settles with end the replay window silently.
+A Desktop restore emits them for every session it brings back, so
+stamping any one resets every session's idle clock on an Emacs restart."
+  (dolist (name agent-shell-gc--settling-events)
+    (with-temp-buffer
+      (setq agent-shell-gc--replaying t)
+      (agent-shell-gc--on-event (list (cons :event name)))
+      (should-not agent-shell-gc--activity)
+      (should-not agent-shell-gc--replaying))))
+
+(ert-deftest agent-shell-gc-settling-events-do-not-stamp-each-other-test ()
+  "No settling event counts, whichever of them arrives first.
+A restore emits all of them, so one that ends the window must not leave
+the next one looking like activity on a settled session."
+  (with-temp-buffer
+    (setq agent-shell-gc--replaying t)
+    (dolist (name agent-shell-gc--settling-events)
+      (agent-shell-gc--on-event (list (cons :event name))))
+    (should-not agent-shell-gc--activity)))
+
+(ert-deftest agent-shell-gc-replayed-output-is-not-activity-test ()
+  "Output re-emitted while replaying history is not activity."
+  (with-temp-buffer
+    (setq agent-shell-gc--replaying t)
+    (agent-shell-gc--on-event '((:event . agent-message-chunk)))
+    (should-not agent-shell-gc--activity)))
+
+(ert-deftest agent-shell-gc-output-after-settling-is-activity-test ()
+  "Once a session has settled, its output counts again."
+  (with-temp-buffer
+    (setq agent-shell-gc--replaying t)
+    (agent-shell-gc--on-event '((:event . session-restored)))
+    (agent-shell-gc--on-event '((:event . agent-message-chunk)))
+    (should agent-shell-gc--activity)))
+
+(ert-deftest agent-shell-gc-input-submitted-is-always-activity-test ()
+  "A submitted prompt counts even while the session looks like it is replaying."
+  (with-temp-buffer
+    (setq agent-shell-gc--replaying t)
+    (agent-shell-gc--on-event '((:event . input-submitted)))
+    (should agent-shell-gc--activity)
+    (should-not agent-shell-gc--replaying)))
+
 ;;; Idle time
 
 (ert-deftest agent-shell-gc-latest-prefers-most-recent-test ()
