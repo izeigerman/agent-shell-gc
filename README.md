@@ -35,6 +35,8 @@ activity; nothing is collected until you set a TTL.
   :straight (:host github :repo "izeigerman/agent-shell-gc")
   :after agent-shell
   :config
+  (setq agent-shell-gc-idle-session-ttl (* 4 60 60))    ; 4 hours
+  (setq agent-shell-gc-idle-worktree-ttl (* 7 24 60 60)) ; 7 days
   (agent-shell-gc-mode))
 ```
 
