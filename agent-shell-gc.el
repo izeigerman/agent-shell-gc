@@ -369,21 +369,19 @@ the clock it had before the restart."
 
 ;;;; Activity tracking
 
-(defun agent-shell-gc--stamp-here ()
-  "Record now as the current buffer's last activity."
-  (setq agent-shell-gc--activity (float-time)))
-
-(defun agent-shell-gc--stamp (&optional buffer)
-  "Record now as the last activity of BUFFER's shell."
-  (when-let* ((shell (agent-shell-gc--shell-buffer (or buffer (current-buffer)))))
-    (with-current-buffer shell
-      (agent-shell-gc--stamp-here))))
+(defun agent-shell-gc--stamp (shell)
+  "Record now as SHELL's last activity.
+SHELL is the agent shell itself, so callers holding some other buffer
+resolve it with `agent-shell-gc--shell-buffer' first."
+  (with-current-buffer shell
+    (setq agent-shell-gc--activity (float-time))))
 
 (defun agent-shell-gc--stamp-typing ()
   "Record typing in the current buffer, unless its shell is still replaying.
-The flag lives on the shell, so a viewport buffer must be resolved to it
-first: its own binding is the global default and never changes, which
-would make composing in a viewport count for nothing."
+The replay flag lives on the shell, so a viewport buffer is resolved to
+it before reading: a viewport receives no events, so its own binding is
+the global default and stays non-nil, which would make composing in one
+count for nothing."
   (when-let* ((shell (agent-shell-gc--shell-buffer (current-buffer)))
               ((not (buffer-local-value 'agent-shell-gc--replaying shell))))
     (agent-shell-gc--stamp shell)))
@@ -398,17 +396,17 @@ otherwise make every restored session look freshly active.
 activity themselves.  `input-submitted' is always honoured, since it can
 only come from the user.
 
-Events arrive with their shell buffer current, so the stamp goes here."
+Events arrive with their shell buffer current, so it is the one stamped."
   (let ((name (map-elt event :event)))
     (cond ((eq name 'clean-up)
            (agent-shell-gc--flush-buffer))
           ((eq name 'input-submitted)
            (setq agent-shell-gc--replaying nil)
-           (agent-shell-gc--stamp-here))
+           (agent-shell-gc--stamp (current-buffer)))
           ((memq name agent-shell-gc--settling-events)
            (setq agent-shell-gc--replaying nil))
           ((not agent-shell-gc--replaying)
-           (agent-shell-gc--stamp-here)))))
+           (agent-shell-gc--stamp (current-buffer))))))
 
 (defun agent-shell-gc--flush-buffer ()
   "Write the current shell's activity to the store before it goes away."
@@ -438,8 +436,8 @@ available."
 (defun agent-shell-gc--on-window-selection (&rest _)
   "Record the selected buffer as activity on its shell or worktree."
   (when agent-shell-gc-mode
-    (if (agent-shell-gc--shell-buffer (current-buffer))
-        (agent-shell-gc--stamp)
+    (if-let* ((shell (agent-shell-gc--shell-buffer (current-buffer))))
+        (agent-shell-gc--stamp shell)
       (agent-shell-gc--touch-worktree-at default-directory))))
 
 (defun agent-shell-gc--on-save ()

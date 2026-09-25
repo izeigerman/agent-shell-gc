@@ -374,6 +374,19 @@ Otherwise installing this package hands every stale worktree a fresh TTL."
     (agent-shell-gc--load-store)
     (should (= (hash-table-count agent-shell-gc--sessions) 0))))
 
+;;; Activity
+
+(ert-deftest agent-shell-gc-stamp-records-on-the-shell-test ()
+  "Activity lands on the shell, not on the buffer reporting it.
+Typing in a viewport is activity on the session it composes for."
+  (let ((shell (generate-new-buffer "agent-shell-gc-tests-shell")))
+    (unwind-protect
+        (with-temp-buffer
+          (agent-shell-gc--stamp shell)
+          (should-not agent-shell-gc--activity)
+          (should (buffer-local-value 'agent-shell-gc--activity shell)))
+      (kill-buffer shell))))
+
 ;;; Events
 
 (ert-deftest agent-shell-gc-settling-events-are-not-activity-test ()
